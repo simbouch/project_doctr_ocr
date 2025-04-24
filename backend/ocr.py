@@ -1,38 +1,56 @@
+import re
 import numpy as np
 from PIL import Image
 from doctr.models import ocr_predictor
 
-# Initialisation de la pipeline OCR de docTR avec le modèle pré-entraîné
+# Initialise la pipeline OCR de docTR
 pipeline = ocr_predictor(pretrained=True)
 
 def perform_ocr(image: Image.Image) -> str:
     """
-    Effectue l'OCR sur une image PIL en utilisant docTR et organise le texte extrait.
-
-    Paramètres :
-        image (PIL.Image.Image): L'image à traiter.
-
-    Retourne :
-        str: Le texte extrait de l'image, organisé par blocs avec séparation claire.
+    Effectue l'OCR sur une image PIL et retourne le texte brut organisé par blocs.
     """
     try:
-        # Convertir l'image PIL en tableau numpy
-        image_array = np.array(image)
-        
-        # Appeler la pipeline et obtenir un objet Document
-        document = pipeline([image_array])
-        
-        # Concaténer le texte extrait avec séparation des blocs
-        extracted_text = ""
+        arr = np.array(image)
+        document = pipeline([arr])
+        extracted = ""
         for page in document.pages:
             for block in page.blocks:
-                block_text = ""
                 for line in block.lines:
-                    # Joindre les mots d'une ligne avec un espace
-                    line_text = " ".join(word.value for word in line.words)
-                    block_text += line_text + "\n"
-                # Ajouter le texte du bloc suivi d'une ligne vide pour séparation
-                extracted_text += block_text + "\n"
-        return extracted_text.strip()  # Supprimer les espaces ou lignes vides en excès
+                    line_text = " ".join(w.value for w in line.words)
+                    extracted += line_text + "\n"
+                extracted += "\n"
+        return extracted.strip()
     except Exception as e:
-        return f"Erreur lors de l'OCR : {str(e)}"
+        return f"Erreur lors de l'OCR : {e}"
+
+def find_total(text: str) -> str:
+    """
+    Détecte le montant total sur un ticket/facture français.
+    1) Cherche explicitement 'Total TTC', 'Total HT', 'Total à payer', 'Montant total', ou un montant suivi de '€'
+    2) À défaut, renvoie le plus grand montant trouvé sur le ticket.
+    """
+    flat = text.replace("\n", " ")
+
+    def normalize_amt(s: str) -> float:
+        """Transforme '1 234,56' en 1234.56"""
+        return float(s.replace(" ", "").replace(",", "."))
+
+    patterns = [
+        r"(?i)total\s*(?:à payer)?\s*(?:ttc)?\s*[:–-]?\s*€?\s*([0-9 ]+[,.]\d{2})",
+        r"(?i)total\s*ht\s*[:–-]?\s*€?\s*([0-9 ]+[,.]\d{2})",
+        r"(?i)montant\s*total\s*[:–-]?\s*€?\s*([0-9 ]+[,.]\d{2})",
+        r"([0-9 ]+[,.]\d{2})\s*€",
+    ]
+    for pat in patterns:
+        m = re.search(pat, flat)
+        if m:
+            return f"{normalize_amt(m.group(1)):.2f}"
+
+    # Fallback: extraire tous les montants et prendre le plus élevé
+    all_amts = re.findall(r"([0-9 ]+[,.]\d{2})", flat)
+    if all_amts:
+        nums = [normalize_amt(a) for a in all_amts]
+        return f"{max(nums):.2f}"
+
+    return "Non détecté"
