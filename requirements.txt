@@ -1,5 +1,5 @@
 streamlit
 python-doctr[torch]
-opencv-python
+opencv-python-headless
 Pillow
 numpy<2.0
