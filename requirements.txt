@@ -1,0 +1,5 @@
+streamlit
+python-doctr[torch]
+opencv-python
+Pillow
+numpy<2.0
